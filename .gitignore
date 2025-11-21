@@ -1,0 +1,51 @@
+# Environment
+.env
+*.env
+venv/
+env/
+ENV/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Google Earth Engine
+config/gee-service-account-key.json
+config/*.json
+!config/titicaca_roi.geojson
+
+# Data
+data/exports/*
+data/cache/*
+data/*.tif
+data/*.csv
+!data/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Streamlit
+.streamlit/secrets.toml

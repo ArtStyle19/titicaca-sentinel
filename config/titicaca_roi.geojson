@@ -1,0 +1,26 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Lago Titicaca",
+        "source": "JRC Global Surface Water",
+        "description": "ROI extraído automáticamente - placeholder",
+        "note": "Ejecuta gee/gee_processor.py para generar el ROI real"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-70.3, -17.3],
+            [-68.4, -17.3],
+            [-68.4, -15.4],
+            [-70.3, -15.4],
+            [-70.3, -17.3]
+          ]
+        ]
+      }
+    }
+  ]
+}
