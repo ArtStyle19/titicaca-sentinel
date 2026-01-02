@@ -1,0 +1,52 @@
+{
+  "date": "2025-11-01",
+  "statistics": {
+    "CI_green_mean": -0.27034234924680195,
+    "CI_green_p10": -0.5772095840764694,
+    "CI_green_p50": -0.2026048950924576,
+    "CI_green_p90": -0.10928650713786035,
+    "CI_green_stdDev": 0.3184349365758379,
+    "Chla_approx_mean": 29.11363928006799,
+    "Chla_approx_p10": 26.625348385873917,
+    "Chla_approx_p50": 29.381985934048714,
+    "Chla_approx_p90": 30.09640119382608,
+    "Chla_approx_stdDev": 2.897720275382804,
+    "NDCI_mean": -0.01775438362798059,
+    "NDCI_p10": -0.0663193275418947,
+    "NDCI_p50": -0.0114070520473518,
+    "NDCI_p90": 0.002683629809005642,
+    "NDCI_stdDev": 0.05821103315350182,
+    "NDWI_mean": -0.18312060687221188,
+    "NDWI_p10": -0.41797226215537125,
+    "NDWI_p50": -0.12109286958477872,
+    "NDWI_p90": -0.05846490402051071,
+    "NDWI_stdDev": 0.1899392226781678,
+    "TSM_mean": 0.9211870429194222,
+    "TSM_p10": 0.799697766933382,
+    "TSM_p50": 0.9526153040145832,
+    "TSM_p90": 0.9788909059015121,
+    "TSM_stdDev": 0.2675212176248603,
+    "Turbidity_mean": 0.7725851320351081,
+    "Turbidity_p10": 0.48825460487635175,
+    "Turbidity_p50": 0.832021100871516,
+    "Turbidity_p90": 0.9414181600982408,
+    "Turbidity_stdDev": 0.1755884119411592
+  },
+  "tile_urls": {
+    "ndwi": "https://earthengine.googleapis.com/v1/projects/database2-1706621807844/maps/e242654834f8cbdd28f63eb25e85d736-545acd8c5d26a95a3530e8de5b859f28/tiles/{z}/{x}/{y}",
+    "ndci": "https://earthengine.googleapis.com/v1/projects/database2-1706621807844/maps/44540f284923dcdca4419ba19af56787-992330556c6d24ad810fede2a9eaebac/tiles/{z}/{x}/{y}",
+    "turbidity": "https://earthengine.googleapis.com/v1/projects/database2-1706621807844/maps/8ca9e5302398733e6475cf4d54211b9e-e09dca21a9f02089b6c3bfefc8f762a8/tiles/{z}/{x}/{y}"
+  },
+  "risk_url": "https://earthengine.googleapis.com/v1/projects/database2-1706621807844/maps/83e25b3fdae056f017cd378781cc31ce-be07ca741561b427ad788c6baa14217a/tiles/{z}/{x}/{y}",
+  "risk_zones": {
+    "1": 423766,
+    "2": 173704,
+    "3": 112315
+  },
+  "params": {
+    "days": 8,
+    "cloud_coverage": 20,
+    "end_offset": 30
+  },
+  "cached_at": "2025-12-04T17:09:05.693370"
+}

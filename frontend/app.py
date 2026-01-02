@@ -22,7 +22,10 @@ from frontend.tabs import (
     render_water_quality_tab,
     render_temporal_tab,
     render_statistics_tab,
-    render_documentation_tab
+    render_documentation_tab,
+    render_comparison_tab,
+    render_report_tab,
+    render_prediction_tab
 )
 
 # Page configuration
@@ -200,10 +203,13 @@ def main():
         "🎯 Evaluación de Riesgo",
         "💧 Calidad del Agua",
         "📅 Análisis Temporal",
-        "📊 Estadísticas",
+        "🔄 Comparación Temporal",
+        "� Predicción ML",
+        "�📊 Reportes Ejecutivos",
+        "📈 Estadísticas",
         "📚 Documentación"
     ])
-    
+
     with tabs[0]:
         render_risk_tab(api_client, latest_data)
     
@@ -214,10 +220,20 @@ def main():
         render_temporal_tab(api_client, latest_data)
     
     with tabs[3]:
-        render_statistics_tab(api_client, latest_data)
+        render_comparison_tab(api_client, latest_data)
     
     with tabs[4]:
+        render_prediction_tab(api_client, latest_data)
+    
+    with tabs[5]:
+        render_report_tab(api_client, latest_data)
+
+    with tabs[6]:
+        render_statistics_tab(api_client, latest_data)
+
+    with tabs[7]:
         render_documentation_tab(api_client, latest_data)
+    
 
 
 if __name__ == "__main__":

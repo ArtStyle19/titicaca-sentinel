@@ -17,7 +17,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from backend.config import settings
 from backend.models import (
     HealthResponse, LatestImageResponse, RiskMapResponse,
-    TimeSeriesResponse, StatsResponse, ROIResponse
+    TimeSeriesResponse, StatsResponse, ROIResponse, ComparisonResponse,
+    PredictionResponse
 )
 
 # Import GEE processor
@@ -121,25 +122,22 @@ async def get_latest_image(
         description="Maximum cloud coverage percentage"
     ),
     days: Optional[int] = Query(None, description="Number of days to look back (overrides months)"),
+    force_refresh: bool = Query(False, description="Force refresh bypassing cache"),
     service: GEEService = Depends(get_service)
 ):
     """Get the latest processed Sentinel-2 image with water quality indices"""
     try:
-        # Use days if provided, otherwise use months or default
-        period_months = None if days else (months or settings.DEFAULT_MONTHS)
-        
-        # Get latest image data
-        composite, roi, date = service.get_latest_image_data(
-            months=period_months,
-            cloud_coverage=cloud_coverage,
-            days=days
-        )
-        
-        # Get statistics
-        stats = service.get_statistics(composite, roi)
-        
-        # Generate tile URLs
-        tile_urls = service.generate_tile_urls(composite)
+        # Resolve period in days (we cache by days)
+        if days:
+            period_days = days
+        else:
+            period_days = (months or settings.DEFAULT_MONTHS) * 30
+
+        # Use cached lightweight payload when available (tile urls, stats)
+        payload = service.get_cached_for_period(days=period_days, cloud_coverage=cloud_coverage, end_offset=0, force=force_refresh)
+        date = payload.get('date')
+        tile_urls = payload.get('tile_urls', {})
+        stats = payload.get('statistics', {})
         
         return LatestImageResponse(
             date=date,
@@ -161,25 +159,21 @@ async def get_risk_map(
         description="Maximum cloud coverage percentage"
     ),
     days: Optional[int] = Query(None, description="Number of days to look back (overrides months)"),
+    force_refresh: bool = Query(False, description="Force refresh bypassing cache"),
     service: GEEService = Depends(get_service)
 ):
     """Get environmental risk classification map"""
     try:
-        # Use days if provided, otherwise use months or default
-        period_months = None if days else (months or settings.DEFAULT_MONTHS)
-        
-        # Process latest data
-        composite, roi, date = service.get_latest_image_data(
-            months=period_months,
-            cloud_coverage=cloud_coverage,
-            days=days
-        )
-        
-        # Generate risk map tile URL
-        risk_url = service.get_risk_map_url(composite)
-        
-        # Calculate risk zones statistics
-        risk_zones = service.calculate_risk_zones(composite, roi)
+        # Resolve period in days
+        if days:
+            period_days = days
+        else:
+            period_days = (months or settings.DEFAULT_MONTHS) * 30
+
+        payload = service.get_cached_for_period(days=period_days, cloud_coverage=cloud_coverage, end_offset=0, force=force_refresh)
+        date = payload.get('date')
+        risk_url = payload.get('risk_url')
+        risk_zones = payload.get('risk_zones', {})
         
         return RiskMapResponse(
             date=date,
@@ -238,23 +232,21 @@ async def get_statistics(
         description="Maximum cloud coverage percentage"
     ),
     days: Optional[int] = Query(None, description="Number of days to look back"),
+    force_refresh: bool = Query(False, description="Force refresh bypassing cache"),
     service: GEEService = Depends(get_service)
 ):
     """Get comprehensive lake statistics"""
     try:
-        # Use days if provided, otherwise use months or default
-        period_months = None if days else (months or settings.DEFAULT_MONTHS)
-        
-        # Process latest data
-        composite, roi, date = service.get_latest_image_data(
-            months=period_months,
-            cloud_coverage=cloud_coverage,
-            days=days
-        )
-        
-        # Get statistics
-        stats = service.get_statistics(composite, roi)
-        
+        # Resolve period in days and use cache-aware retrieval
+        if days:
+            period_days = days
+        else:
+            period_days = (months or settings.DEFAULT_MONTHS) * 30
+
+        payload = service.get_cached_for_period(days=period_days, cloud_coverage=cloud_coverage, end_offset=0, force=force_refresh)
+        date = payload.get('date')
+        stats = payload.get('statistics', {})
+
         # Organize statistics
         organized_stats = service.organize_statistics(stats, date)
         
@@ -271,6 +263,106 @@ async def get_roi(service: GEEService = Depends(get_service)):
         return service.get_roi_geojson()
     
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/compare")
+async def compare_periods(
+    period1_days: int = Query(7, description="Days for recent period"),
+    period2_days: int = Query(7, description="Days for comparison period"),
+    period2_offset: int = Query(30, description="Days to offset period 2 from present"),
+    cloud_coverage: int = Query(
+        settings.DEFAULT_CLOUD_COVERAGE,
+        ge=10,
+        le=settings.MAX_CLOUD_COVERAGE,
+        description="Maximum cloud coverage percentage"
+    ),
+    force_refresh: bool = Query(False, description="Force refresh both periods and bypass cache"),
+    service: GEEService = Depends(get_service)
+):
+    """Compare two temporal periods to detect changes
+    
+    Example: Compare last 7 days vs 7 days from 30 days ago
+    """
+    try:
+        comparison = service.compare_periods(
+            period1_days=period1_days,
+            period2_days=period2_days,
+            period2_offset_days=period2_offset,
+            force=force_refresh,
+            cloud_coverage=cloud_coverage
+        )
+        
+        return comparison
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/predict", response_model=PredictionResponse, tags=["Prediction"])
+async def predict_time_series(
+    metric: str = Query("ndci", description="Metric to predict: ndci, ndwi, turbidity, or chla_approx"),
+    historical_days: int = Query(90, ge=30, le=180, description="Days of historical data to use"),
+    forecast_days: int = Query(7, ge=1, le=14, description="Days to forecast into future"),
+    cloud_coverage: int = Query(
+        settings.DEFAULT_CLOUD_COVERAGE,
+        ge=10,
+        le=settings.MAX_CLOUD_COVERAGE,
+        description="Maximum cloud coverage percentage"
+    ),
+    service: GEEService = Depends(get_service)
+):
+    """Predict future values using Prophet time series forecasting
+    
+    Uses historical satellite data to predict future values of water quality metrics.
+    Includes confidence intervals and automatic alerts for predicted threshold exceedances.
+    
+    **Supported metrics:**
+    - `ndci`: Normalized Difference Chlorophyll Index (algal blooms)
+    - `ndwi`: Normalized Difference Water Index (water presence)
+    - `turbidity`: Water turbidity (sediment load)
+    - `chla_approx`: Approximate Chlorophyll-a concentration (µg/L)
+    
+    **Example use cases:**
+    - Predict algal bloom likelihood 7 days ahead
+    - Forecast turbidity trends after rainfall
+    - Early warning for water quality degradation
+    """
+    try:
+        # Validate metric
+        valid_metrics = ['ndci', 'ndwi', 'turbidity', 'chla_approx']
+        if metric not in valid_metrics:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid metric '{metric}'. Must be one of: {', '.join(valid_metrics)}"
+            )
+        
+        print(f"[PREDICT] Starting prediction for {metric}, {historical_days} days, forecast {forecast_days}")
+        
+        prediction = service.predict_time_series(
+            metric=metric,
+            historical_days=historical_days,
+            forecast_days=forecast_days,
+            cloud_coverage=cloud_coverage
+        )
+        
+        print(f"[PREDICT] Prediction completed successfully")
+        
+        return prediction
+    
+    except ValueError as e:
+        print(f"[PREDICT ERROR] ValueError: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except ImportError as e:
+        print(f"[PREDICT ERROR] ImportError: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Prophet library not installed. Run: pip install prophet"
+        )
+    except Exception as e:
+        print(f"[PREDICT ERROR] Exception: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 

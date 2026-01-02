@@ -2,7 +2,7 @@
 Pydantic models for API requests and responses
 """
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
@@ -48,6 +48,35 @@ class StatsResponse(BaseModel):
     date: str
     statistics: Dict[str, float]
     percentiles: Dict[str, Dict[str, float]]
+
+
+class ComparisonResponse(BaseModel):
+    """Temporal comparison response"""
+    period1: Dict[str, Any]  # {date, statistics, tile_urls}
+    period2: Dict[str, Any]  # {date, statistics, tile_urls}
+    changes: Dict[str, float]  # Absolute changes
+    percent_changes: Dict[str, float]  # Percentage changes
+    alerts: List[Dict[str, str]]  # Significant changes detected
+
+
+class PredictionPoint(BaseModel):
+    """Single prediction point"""
+    date: str
+    predicted_value: float
+    lower_bound: float
+    upper_bound: float
+    confidence: float = Field(..., ge=0, le=1, description="Prediction confidence (0-1)")
+
+
+class PredictionResponse(BaseModel):
+    """Time series prediction response"""
+    metric: str  # ndci, ndwi, turbidity, chla_approx
+    historical_data: List[Dict[str, Any]]  # Historical time series
+    predictions: List[Dict[str, Any]]  # Future predictions (changed from List[PredictionPoint])
+    forecast_days: int
+    model_metrics: Dict[str, float]  # MAE, RMSE, etc
+    alerts: List[Dict[str, str]]  # Alerts if predicted values exceed thresholds
+    generated_at: str
 
 
 class ROIFeature(BaseModel):

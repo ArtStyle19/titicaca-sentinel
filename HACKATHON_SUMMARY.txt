@@ -1,0 +1,250 @@
+Titicaca Sentinel — Resumen para Hackathon
+
+1) Título
+Titicaca Sentinel — Plataforma de Monitoreo Satelital de Calidad del Agua
+
+2) Resumen ejecutivo (elevator pitch)
+Titicaca Sentinel es una plataforma de vigilancia ambiental que usa imágenes Sentinel-2 procesadas en Google Earth Engine (GEE) para evaluar la calidad del agua del Lago Titicaca. Provee mapas, índices espectrales (NDCI, NDWI, Turbidez, TSM, CI_green y estimaciones de clorofila), series temporales, estadísticas, evaluación de riesgo espacial y **comparación temporal avanzada** para detectar cambios significativos entre períodos. Está diseñada para ser reproducible, modular, y de fácil despliegue con backend en FastAPI y frontend en Streamlit.
+
+3) Objetivo
+- Detectar y visualizar anomalías en la calidad del agua (picos de clorofila, turbidez alta, pérdida de agua visible) usando datos ópticos de Sentinel-2.
+- **NUEVO**: Comparar períodos temporales para identificar cambios críticos (>20%) y generar alertas automáticas.
+- Proveer métricas y visualizaciones útiles para gestores ambientales, investigadores y tomadores de decisiones.
+
+4) Arquitectura (alto nivel)
+- Frontend: Streamlit (UI), folium / streamlit_folium para mapas, Plotly para gráficos.
+- Backend: FastAPI + Uvicorn. Endpoints REST que orquestan el procesamiento o devuelven artefactos preprocesados.
+- Procesamiento satelital: Google Earth Engine (Javascript + Python API) para descargar, filtrar (cobertura de nubes), calcular índices, composites y generar tiles (mapas en teselas).
+- Cache / sesión: Streamlit session state y cache local para evitar peticiones repetidas.
+
+5) Componentes principales
+- backend/services.py: lógica de negocio GEE e interfaces con Earth Engine. **NUEVO**: método compare_periods() para análisis temporal.
+- backend/main.py: API y endpoints (/health, /latest, /risk-map, /time-series, /roi, /statistics, **/compare**).
+- frontend/app.py: orquestador Streamlit, sidebar y tabs (ahora 6 tabs).
+- frontend/tabs/: pestañas modulares (risk_tab.py, water_quality_tab.py, temporal_tab.py, **comparison_tab.py**, statistics_tab.py, documentation_tab.py).
+- frontend/components/: helpers reutilizables para mapas, charts y UI.
+- frontend/utils/: cliente API, transformaciones y estilos.
+
+6) Flujo de datos (cómo funciona)
+- El usuario abre la app Streamlit.
+- El frontend hace 1 petición al endpoint /latest para obtener las URLs de tile, estadísticas y metadatos del último composite (configurable por días/meses y cobertura de nubes).
+- Para mapas de riesgo, el frontend llama /risk-map que devuelve un tile_url y distribución de zonas de riesgo (píxeles) — la app calcula porcentajes para mostrar en UI.
+- Para series temporales la app llama /time-series con coordenada y rango de fechas; el backend extrae valores por fecha en ese punto.
+- Para evitar cargas repetidas, los resultados se guardan en la sesión de Streamlit y en un cache controlado por clave.
+
+7) Endpoints relevantes (resumen)
+- GET /health -> estado del servicio y disponibilidad GEE.
+- GET /latest?cloud_coverage=&days= -> devuelve date, tile_urls (ndci, ndwi, turbidity), statistics (plano) y metadatos.
+- GET /risk-map?cloud_coverage=&days= -> devuelve date, tile_url (mapa riesgo), risk_zones (conteo píxeles por nivel).
+- GET /time-series?start_date=&end_date=&lat=&lon=&cloud_coverage= -> devuelve location + data[] con date y valores de índices.
+- GET /roi -> GeoJSON del área de interés.
+- **NUEVO** GET /compare?period1_days=&period2_days=&period2_offset=&cloud_coverage= -> compara dos períodos y devuelve:
+  - period1, period2: datos completos (date, statistics, tile_urls) de cada período
+  - changes: cambios absolutos en índices clave
+  - percent_changes: cambios porcentuales
+  - alerts[]: lista de cambios significativos (>20%) con severidad (high/medium)
+
+8) Interpretación de índices (qué significan y recomendaciones)
+- NDCI (Normalized Difference Chlorophyll Index): correlacionado con concentraciones de clorofila y presencia de fitoplancton. Valores altos -> posible proliferación de algas.
+  - Interpretación práctica:
+    - NDCI < -0.2: baja concentración / agua más clara
+    - -0.2 <= NDCI <= 0.2: concentración moderada
+    - NDCI > 0.2: concentración alta — luego validar con imágenes y campo
+  - Recomendación: si grandes áreas superan umbrales P70/P90 considere muestreo de campo y vigilancia más frecuente.
+
+- NDWI (Normalized Difference Water Index): indica presencia de agua vs tierra/vegetación. Valores altos indican agua clara.
+  - Interpretación práctica:
+    - NDWI > 0.3: agua muy definida
+    - NDWI entre 0 y 0.3: agua con partículas/sedimentos
+    - NDWI < 0: suelo/vegetación
+
+- Turbidity (indicador basado en bandas): estima carga de sedimentos suspendidos (TSM proxy).
+  - Valores mayores indican mayor turbidez. Umbrales típicos dependientes del sensor/calibración.
+  - Recomendación: combinar con NDCI para discriminar si alto NDCI se debe a materia particulada o proliferación biológica.
+
+- TSM (Total Suspended Matter): relación con turbidez; utilidad similar a Turbidity en áreas con calibración local
+- CI_green (Green Chlorophyll Index / CIgreen): índice sensible a pigmentos en banda verde; útil para complementar NDCI.
+
+- Clorofila aproximada (Chla_approx): estimación empírica basada en índices. Es orientativa y debe validarse con muestreos.
+
+Interpretación integrada y recomendaciones de gestión:
+- Si NDCI y Chla_approx elevadas + NDWI estable -> sospecha de florecimientos algales.
+- Si Turbidez/TSM suben brusca y NDWI baja -> evento de sedimentación (arrastre, erosión) o descarga.
+- Si >10% del área en nivel crítico (configurable) -> activar alertas operativas y muestreo en sitio.
+
+9) Validaciones y limitaciones
+- Óptico sólo: nubes, sustrato y mezcla de señales limitan la detección. Requiere filtros de nube y compositing.
+- Resolución espacial (Sentinel-2): 10–20 m — detecta parches grandes, no microescala.
+- Calibración: estimaciones de clorofila/turbidez son aproximadas; ideal calibrar con muestreos locales.
+- Latencia: procesamiento GEE para composites y clasificación puede tardar (30–180s según cantidad de imágenes), por eso se usan timeouts y caching.
+
+10) **NUEVA FUNCIONALIDAD: Comparación Temporal Avanzada**
+
+Esta es la funcionalidad más sofisticada del sistema y permite detección automática de anomalías.
+
+**¿Qué hace?**
+- Compara dos períodos configurables (ej: últimos 7 días vs hace 30 días)
+- Calcula cambios absolutos y porcentuales en todos los índices clave
+- Genera alertas automáticas cuando cambios > 20% (configurable)
+- Visualiza mapas lado a lado para comparación visual
+- Crea gráficos de barras comparativos
+
+**Casos de uso prácticos:**
+1. Detección de florecimientos algales estacionales
+   - Comparar mismo mes año actual vs año anterior
+   - Alerta si NDCI aumenta >30%
+
+2. Monitoreo post-evento climático
+   - Comparar semana antes vs semana después de lluvias intensas
+   - Detectar aumentos de turbidez
+
+3. Evaluación de impacto de intervenciones
+   - Comparar antes vs después de proyectos de saneamiento
+   - Medir mejoras en calidad del agua
+
+4. Vigilancia rutinaria
+   - Comparar semana actual vs semana anterior
+   - Detectar cambios inesperados
+
+**Arquitectura técnica:**
+- Backend: nuevo método `compare_periods()` en GEEService
+- Procesamiento: ejecuta 2 composites con offsets temporales configurables
+- Frontend: nuevo tab "Comparación Temporal" con UI completa
+- Alertas: sistema de severidad (high >50%, medium >20%)
+
+**Parámetros configurables:**
+- period1_days: días del período reciente (default: 7)
+- period2_days: días del período de comparación (default: 7)
+- period2_offset: cuántos días atrás (default: 30)
+- cloud_coverage: filtro de nubes (default: 20%)
+
+**Output del endpoint /compare:**
+```json
+{
+  "period1": {
+    "date": "2025-11-18",
+    "statistics": {...},
+    "tile_urls": {...}
+  },
+  "period2": {
+    "date": "2025-10-19",
+    "statistics": {...},
+    "tile_urls": {...}
+  },
+  "changes": {
+    "NDCI_mean": 0.05,
+    "Turbidity_mean": -0.15
+  },
+  "percent_changes": {
+    "NDCI_mean": 25.3,
+    "Turbidity_mean": -18.7
+  },
+  "alerts": [
+    {
+      "index": "NDCI",
+      "change": "+25.3%",
+      "message": "NDCI: aumento significativo de 25.3%",
+      "severity": "medium"
+    }
+  ]
+}
+```
+
+**Visualizaciones incluidas:**
+1. Alertas destacadas (color-coded por severidad)
+2. Métricas de cambio con iconos (↗️ aumento, ↘️ disminución, ↔️ estable)
+3. Mapas comparativos lado a lado (selección de índice)
+4. Gráfico de barras agrupadas
+5. Panel de interpretación y recomendaciones
+
+11) UX y decisiones implementadas
+- Carga única por sesión: la app guarda en `st.session_state` los resultados principales para evitar múltiples peticiones al backend durante la navegación.
+- Botón “Limpiar Caché” en sidebar para forzar recarga.
+- Mensajes y spinners con estimado de tiempo (2–3 minutos para cookie-cutter 7 días/8 imágenes).
+- Manejo de errores y retroalimentación (timeouts, errores HTTP).
+
+11) Cómo correr localmente (resumen corto)
+Precondiciones: Python 3.11/3.12, credenciales GEE configuradas (service account o usuario), virtualenv/venv.
+
+- Crear venv e instalar dependencias:
+  python -m venv venv
+  source venv/bin/activate
+  pip install -r requirements.txt
+
+- Backend (desarrollo):
+  ./start_backend.sh
+  # esto ejecuta uvicorn backend.main --reload (revisar script)
+
+- Frontend:
+  ./start_frontend.sh
+  # abre Streamlit en http://localhost:8501
+
+- Logs:
+  backend.log, frontend.log en la raíz del proyecto.
+
+12) Comandos importantes (copiables)
+- Activar entorno:
+  source venv/bin/activate
+- Iniciar backend en background (ejemplo):
+  nohup ./start_backend.sh > backend.log 2>&1 &
+- Iniciar frontend en background (ejemplo):
+  nohup ./start_frontend.sh > frontend.log 2>&1 &
+- Borrar cache Streamlit (local):
+  rm -rf ~/.streamlit/cache
+
+13) Calidad del código y estructura mantenible
+- Frontend modularizado en tabs, components y utils para facilitar cambios y PRs pequeños.
+- Backend: separación de servicio GEE (services.py) y API (main.py).
+- Tests: incluye scripts de prueba rápida (`test_data_transformation.py`) y pruebas unitarias (si se extienden).
+
+14) Proyecciones futuras (roadmap)
+IMPLEMENTADO RECIENTEMENTE:
+✅ Sistema de Comparación Temporal Avanzada con detección automática de anomalías (ver sección 10)
+✅ Endpoint /compare con análisis de cambios porcentuales y alertas de severidad
+✅ Visualización side-by-side de períodos con mapas, gráficos y métricas comparativas
+✅ Sistema de alertas multi-nivel (high >50%, medium >20%) con recomendaciones automáticas
+
+Corto plazo (próximos 3 meses):
+- Añadir endpoint de jobs asíncronos: submit + poll, para evitar timeouts y dar progresos en tiempo real.
+- Agregar tests end-to-end ligeros y CI que valide respuestas de endpoints (mock GEE).
+- Añadir validaciones y transformaciones más robustas de estadísticos (p10/p50/p90 estándar).
+- Extender sistema de alertas con notificaciones automáticas (email/webhook) basadas en comparaciones.
+
+Mediano plazo (6-12 meses):
+- Calibración empírica con muestreos in-situ para mejorar estimadores de clorofila y TSM.
+- Soporte multi-lago / multi-ROI con gestión de múltiples regiones.
+- Machine Learning para mejorar detección de anomalías basándose en patrones históricos.
+- Exportación de reportes comparativos en PDF con gráficos y análisis automático.
+
+Largo plazo (1–2 años):
+- Integración con modelos predictivos: usar series temporales + ML para predecir eventos (florecimientos, sedimentación) con horizonte corto.
+- Integración con sensores IoT y datos meteorológicos para enriquecer detección y explicar causas.
+- Sistema de alerta temprana basado en análisis de tendencias y comparaciones automáticas programadas.
+- API pública con autenticación para terceros que quieran consumir datos de calidad de agua.
+
+15) Métricas de evaluación (KPIs) para la hackathon
+- Latencia: tiempo desde petición hasta tile/estadísticas (objetivo < 3 min para 7 días de datos).
+- Exactitud: validación con muestreos (si disponibles) — correlación entre Chla_approx y medidas in-situ.
+- Robustez: manejo de errores (graceful degradation), porcentaje de requests exitosas.
+- Usabilidad: tiempo para identificar un punto crítico desde abrir la app (objetivo < 2 min una vez cacheada).
+
+16) Material para la demo (sugerido)
+- Live demo: abrir Streamlit, mostrar carga inicial, navegar por tabs (Riesgo, Calidad del Agua, Temporal, Estadísticas).
+- Casos de uso: mostrar un evento simulado (aumento de turbidez) y cómo la app destaca zonas críticas.
+- Slide breve con arquitectura y roadmap.
+
+17) Autoría y contacto
+- Proyecto: Titicaca Sentinel
+- Repo local: /home/vicari/Downloads/PROJECTS/titicaca-sentinel
+- Contacto (para la demo): vicari (en tu equipo)
+
+18) Anexos técnicos rápidos
+- Formato de estadísticas backend: plano. Ejemplo: `{"NDCI_mean": ..., "NDCI_p50": ..., "Turbidity_mean": ...}`. El frontend transforma a estructura anidada para visualización.
+- Tile URLs: se exponen como plantillas de teselas {z}/{x}/{y} generadas por Earth Engine REST tiles.
+
+19) Notas finales / recomendaciones para la hackathon
+- En la presentación, enfatizar modularidad (fácil de extender), impacto (monitoreo ambiental) y resultados reproducibles.
+- Preparar una demo corta y un plan de contingencia si GEE tiene latencia (usar un conjunto de tiles y respuestas almacenadas localmente para la demo si hace falta).
+
+---
+Archivo creado automáticamente para presentación en hackathon. Si quieres, lo adapto a un README en Markdown con imágenes y comandos de despliegue paso a paso.

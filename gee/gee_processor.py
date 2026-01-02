@@ -148,13 +148,14 @@ class TiticacaProcessor:
         
         return image.addBands(risk_map)
     
-    def process_latest(self, months=6, cloud_coverage=20, days=None):
+    def process_latest(self, months=6, cloud_coverage=20, days=None, end_date_offset=0):
         """Process latest available Sentinel-2 data
         
         Args:
             months: Number of months to look back (default: 6)
             cloud_coverage: Maximum cloud coverage percentage (default: 20)
             days: Number of days to look back (overrides months if specified)
+            end_date_offset: Days to subtract from current date for end date (default: 0)
         """
         if days:
             period_days = days
@@ -163,7 +164,7 @@ class TiticacaProcessor:
             period_days = months * 30
             print(f"Processing latest Sentinel-2 data (last {months} months)...")
             
-        end_date = datetime.now()
+        end_date = datetime.now() - timedelta(days=end_date_offset)
         start_date = end_date - timedelta(days=period_days)
         
         print("  Step 1/5: Extracting lake ROI...")

@@ -11,24 +11,36 @@ def create_map(center=MAP_CENTER, zoom=MAP_DEFAULT_ZOOM):
     m = folium.Map(
         location=center,
         zoom_start=zoom,
-        tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        attr='Esri',
-        name='Satellite'
+        tiles='OpenStreetMap',
+        attr='OpenStreetMap',
+        prefer_canvas=True,
+        control_scale=True
     )
-    
-    # Add additional base layers
-    folium.TileLayer(
-        'OpenStreetMap',
-        name='Streets',
-        control=True
+
+    # Add helpful plugins for a more professional map
+    folium.plugins.Fullscreen(
+        position='topright',
+        title='Pantalla completa',
+        title_cancel='Salir de pantalla completa'
     ).add_to(m)
     
-    folium.TileLayer(
-        'CartoDB positron',
-        name='Light',
-        control=True
+    folium.plugins.MeasureControl(
+        position='topleft',
+        primary_length_unit='meters',
+        primary_area_unit='sqmeters',
+        secondary_length_unit='kilometers',
+        secondary_area_unit='hectares'
     ).add_to(m)
-    
+
+    # Mouse position (lat/lon) for easier inspection
+    folium.plugins.MousePosition(
+        position='bottomleft',
+        separator=' | ',
+        prefix='Coordenadas:',
+        lat_formatter="function(num) {return L.Util.formatNum(num, 5) + ' °N';}",
+        lng_formatter="function(num) {return L.Util.formatNum(num, 5) + ' °E';}"
+    ).add_to(m)
+
     return m
 
 
@@ -89,3 +101,21 @@ def create_legend_html(layer_type):
     
     html += "</div>"
     return html
+
+
+def add_tile_overlay(m: folium.Map, tile_url: str, name: str = 'Overlay', opacity: float = 0.8):
+    """Add a tile overlay (mapid/tile url) to the map with a default opacity and layer name.
+
+    This helper ensures overlays are added to the LayerControl and can be toggled.
+    """
+    try:
+        folium.raster_layers.TileLayer(
+            tiles=tile_url,
+            attr=name,
+            name=name,
+            overlay=True,
+            control=True,
+            opacity=opacity
+        ).add_to(m)
+    except Exception as e:
+        print(f"Warning: could not add tile overlay {name}: {e}")

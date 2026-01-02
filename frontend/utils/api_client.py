@@ -124,6 +124,41 @@ class APIClient:
         """Fetch ROI geometry from API"""
         return _self._make_request("/roi")
     
+    def get_comparison(
+        _self,
+        period1_days: int = 7,
+        period2_days: int = 7,
+        period2_offset: int = 30,
+        cloud_coverage: int = 20
+    ) -> Optional[Dict]:
+        """Fetch temporal comparison data from API"""
+        params = {
+            'period1_days': period1_days,
+            'period2_days': period2_days,
+            'period2_offset': period2_offset,
+            'cloud_coverage': cloud_coverage
+        }
+        
+        return _self._make_request("/compare", params)
+    
+    def get_prediction(_self, metric: str = "ndci", historical_days: int = 90, forecast_days: int = 7, cloud_coverage: int = 20) -> Optional[Dict]:
+        """Fetch time series predictions from API
+        
+        Args:
+            metric: Metric to predict (ndci, ndwi, turbidity, chla_approx)
+            historical_days: Days of historical data to use (30-180)
+            forecast_days: Days to forecast (1-14)
+            cloud_coverage: Max cloud coverage percentage
+        """
+        params = {
+            'metric': metric,
+            'historical_days': historical_days,
+            'forecast_days': forecast_days,
+            'cloud_coverage': cloud_coverage
+        }
+        
+        return _self._make_request("/predict", params)
+    
     def health_check(_self) -> Optional[Dict]:
         """Check API health status"""
         return _self._make_request("/health")

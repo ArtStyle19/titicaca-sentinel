@@ -5,7 +5,7 @@ Centralizes all configuration values for maintainability
 
 # API Configuration
 API_BASE_URL = "http://localhost:8000"
-API_TIMEOUT = 300  # 5 minutos para procesamiento GEE (ajustado desde 120s)
+API_TIMEOUT = 900  # 15 minutos para procesamiento GEE + Prophet (ajustado desde 300s)
 
 # Cache Configuration
 CACHE_TTL = 600  # 10 minutes in seconds
